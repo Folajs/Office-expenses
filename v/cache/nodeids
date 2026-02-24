@@ -1,0 +1,8 @@
+[
+  "tests/test_approvals.py::test_cannot_skip_approval_level",
+  "tests/test_approvals.py::test_department_head_can_approve",
+  "tests/test_approvals.py::test_rejection_finalizes_expense",
+  "tests/test_expenses.py::test_expense_submission_requires_auth",
+  "tests/test_permissions.py::test_initiator_cannot_approve",
+  "tests/test_reports.py::test_non_finance_cannot_export_csv"
+]
