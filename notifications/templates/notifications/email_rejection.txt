@@ -1,0 +1,5 @@
+Expense Rejected
+Expense: {{ expense.title }}
+Amount: {{ expense.amount }}
+Rejected by: {{ rejected_by.get_role_display }} ({{ rejected_by.username }})
+Please review and take action accordingly.

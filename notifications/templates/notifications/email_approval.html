@@ -1,0 +1,11 @@
+<h2>Expense Approved</h2>
+
+<p><strong>Expense:</strong> {{ expense.title }}</p>
+<p><strong>Amount:</strong> {{ expense.amount }}</p>
+<p><strong>Approved by:</strong> {{ approved_by.get_role_display }} ({{ approved_by.first_name }})</p>
+
+{% if is_final %}
+    <p style="color: green;"><strong>This expense has been fully approved.</strong></p>
+{% else %}
+    <p>Next-level approval is required.</p>
+{% endif %}

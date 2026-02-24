@@ -1,0 +1,456 @@
+openapi: 3.0.3
+info:
+  title: Office Expenses Management API
+  version: 1.0.0
+  description: |
+    Enterprise-grade REST API for a department-based, multi-level
+    expense approval and financial control system.
+
+    -----------------------------------------
+    WORKFLOW OVERVIEW
+    -----------------------------------------
+    1. Initiator submits expense → PENDING
+    2. Department Head approves → FINANCE_REVIEW
+    3. Finance approves → COO_REVIEW
+    4. COO approves → APPROVED
+    5. Finance marks as PAID → PAID
+    6. Any stage may REJECT → REJECTED
+
+    -----------------------------------------
+    EMAIL NOTIFICATION BEHAVIOR
+    -----------------------------------------
+
+    Submission:
+      - Notifies Department Head
+
+    Approval:
+      - Dept Head → Finance
+      - Finance → COO
+      - COO → Initiator (final approval)
+
+    Rejection Hierarchy:
+      - Dept Head rejects → Initiator notified
+      - Finance rejects → Dept Head + Initiator notified
+      - COO rejects → Finance + Dept Head + Initiator notified
+
+servers:
+  - url: http://127.0.0.1:8000/api/v1
+    description: Development
+  - url: https://api.companydomain.com/api/v1
+    description: Production
+
+security:
+  - BearerAuth: []
+
+tags:
+  - name: Authentication
+  - name: Expenses
+  - name: Approvals
+  - name: Payments
+  - name: Reports
+  - name: Admin
+
+components:
+
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+
+    ##################################
+    # CORE ENUMS
+    ##################################
+
+    UserRole:
+      type: string
+      enum:
+        - initiator
+        - dept_head
+        - finance
+        - coo
+        - admin
+
+    ExpenseStatus:
+      type: string
+      enum:
+        - PENDING
+        - FINANCE_REVIEW
+        - COO_REVIEW
+        - APPROVED
+        - REJECTED
+        - PAID
+
+    ##################################
+    # USER
+    ##################################
+
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+        username:
+          type: string
+        email:
+          type: string
+        role:
+          $ref: '#/components/schemas/UserRole'
+        department_id:
+          type: integer
+          nullable: true
+
+    ##################################
+    # EXPENSE
+    ##################################
+
+    Expense:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        description:
+          type: string
+        amount:
+          type: number
+          format: decimal
+        status:
+          $ref: '#/components/schemas/ExpenseStatus'
+        department:
+          type: integer
+        category:
+          type: integer
+        initiator:
+          type: integer
+        approved_by:
+          type: integer
+          nullable: true
+        paid_by:
+          type: integer
+          nullable: true
+        processed_at:
+          type: string
+          format: date-time
+          nullable: true
+        paid_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    ##################################
+    # PAGINATION
+    ##################################
+
+    PaginatedExpenseResponse:
+      type: object
+      properties:
+        count:
+          type: integer
+        next:
+          type: string
+          nullable: true
+        previous:
+          type: string
+          nullable: true
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Expense'
+
+    ##################################
+    # APPROVAL ACTION
+    ##################################
+
+    ApprovalActionRequest:
+      type: object
+      required: [action]
+      properties:
+        action:
+          type: string
+          enum: [APPROVED, REJECTED]
+        comment:
+          type: string
+
+    ##################################
+    # REPORTING
+    ##################################
+
+    DepartmentReport:
+      type: object
+      properties:
+        department:
+          type: string
+        total_amount:
+          type: number
+        expense_count:
+          type: integer
+
+    CategoryReport:
+      type: object
+      properties:
+        category:
+          type: string
+        total_amount:
+          type: number
+        expense_count:
+          type: integer
+
+    EmployeeReport:
+      type: object
+      properties:
+        employee:
+          type: string
+        total_amount:
+          type: number
+        expense_count:
+          type: integer
+
+    FinancialSummary:
+      type: object
+      properties:
+        total_requested:
+          type: number
+        total_approved:
+          type: number
+        total_paid:
+          type: number
+        total_rejected:
+          type: number
+
+    ##################################
+    # ERROR RESPONSE
+    ##################################
+
+    ErrorResponse:
+      type: object
+      properties:
+        detail:
+          type: string
+
+paths:
+
+  ##################################
+  # AUTHENTICATION
+  ##################################
+
+  /auth/login/:
+    post:
+      tags: [Authentication]
+      summary: Login user and obtain JWT tokens
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username:
+                  type: string
+                password:
+                  type: string
+      responses:
+        200:
+          description: Successful authentication
+        401:
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  ##################################
+  # EXPENSES
+  ##################################
+
+  /expenses/:
+    post:
+      tags: [Expenses]
+      summary: Create new expense (Initiator only)
+      responses:
+        201:
+          description: Expense created
+
+  /expenses/history/:
+    get:
+      tags: [Expenses]
+      summary: Retrieve paginated expenses
+      parameters:
+        - in: query
+          name: status
+          schema:
+            $ref: '#/components/schemas/ExpenseStatus'
+        - in: query
+          name: category
+          schema:
+            type: integer
+        - in: query
+          name: start_date
+          schema:
+            type: string
+            format: date
+        - in: query
+          name: end_date
+          schema:
+            type: string
+            format: date
+      responses:
+        200:
+          description: Expense list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedExpenseResponse'
+
+  ##################################
+  # APPROVALS
+  ##################################
+
+  /approvals/department/{id}/:
+    post:
+      tags: [Approvals]
+      summary: Department Head approval stage
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApprovalActionRequest'
+      responses:
+        200:
+          description: Action processed
+
+  /approvals/finance/{id}/:
+    post:
+      tags: [Approvals]
+      summary: Finance review stage
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApprovalActionRequest'
+      responses:
+        200:
+          description: Action processed
+
+  /approvals/coo/{id}/:
+    post:
+      tags: [Approvals]
+      summary: COO final approval stage
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApprovalActionRequest'
+      responses:
+        200:
+          description: Action processed
+
+  ##################################
+  # PAYMENTS
+  ##################################
+
+  /expenses/{id}/mark-paid/:
+    post:
+      tags: [Payments]
+      summary: Mark approved expense as paid
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                payment_reference:
+                  type: string
+      responses:
+        200:
+          description: Expense marked as paid
+
+  ##################################
+  # REPORTING
+  ##################################
+
+  /reports/by-department/:
+    get:
+      tags: [Reports]
+      summary: Aggregate expenses grouped by department
+      responses:
+        200:
+          description: Department summary
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DepartmentReport'
+
+  /reports/by-category/:
+    get:
+      tags: [Reports]
+      summary: Aggregate expenses grouped by category
+      responses:
+        200:
+          description: Category summary
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CategoryReport'
+
+  /reports/by-employee/:
+    get:
+      tags: [Reports]
+      summary: Aggregate expenses grouped by initiator
+      responses:
+        200:
+          description: Employee summary
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/EmployeeReport'
+
+  /reports/financial-summary/:
+    get:
+      tags: [Reports]
+      summary: Overall financial totals
+      responses:
+        200:
+          description: Financial summary
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FinancialSummary'

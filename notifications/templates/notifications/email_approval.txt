@@ -1,0 +1,11 @@
+Expense Approved
+
+Expense: {{ expense.title }}
+Amount: {{ expense.amount }}
+Approved by: {{ approved_by.get_role_display }} ({{ approved_by.username }})
+
+{% if is_final %}
+This expense has been fully approved.
+{% else %}
+Next-level approval is required.
+{% endif %}
